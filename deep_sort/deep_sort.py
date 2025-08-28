@@ -26,29 +26,33 @@ class DeepSort(object):
         self.tracker = Tracker(metric, max_iou_distance=max_iou_distance, max_age=max_age, n_init=n_init)
 
     def update(self, bbox_xywh, confidences, classes, ori_img, masks=None):
-        self.height, self.width = ori_img.shape[:2]
-        # generate detections
-        features = self._get_features(bbox_xywh, ori_img)
-        bbox_tlwh = self._xywh_to_tlwh(bbox_xywh)
-        detections = [Detection(bbox_tlwh[i], conf, label, features[i], None if masks is None else masks[i])
-                      for i, (conf, label) in enumerate(zip(confidences, classes))
-                      if conf > self.min_confidence]
-
-        # run on non-maximum supression
-        boxes = np.array([d.tlwh for d in detections])
-        scores = np.array([d.confidence for d in detections])
-        indices = non_max_suppression(boxes, self.nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]
-
-        # update tracker
+        
         self.tracker.predict()
-        self.tracker.update(detections)
+        
+        # update tracker
+        if len(bbox_xywh):
+            self.height, self.width = ori_img.shape[:2]
+            # generate detections
+            features = self._get_features(bbox_xywh, ori_img)
+            bbox_tlwh = self._xywh_to_tlwh(bbox_xywh)
+            detections = [Detection(bbox_tlwh[i], conf, label, features[i], None if masks is None else masks[i])
+                        for i, (conf, label) in enumerate(zip(confidences, classes))
+                        if conf > self.min_confidence]
 
+            # run on non-maximum supression
+            boxes = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            indices = non_max_suppression(boxes, self.nms_max_overlap, scores)
+            detections = [detections[i] for i in indices]
+            self.tracker.update(detections)
+            
+            
         # output bbox identities
         outputs = []
         mask_outputs = []
         for track in self.tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
+                # print('track not confirmed', track.is_confirmed(), track.time_since_update)
                 continue
             box = track.to_tlwh()
             x1, y1, x2, y2 = self._tlwh_to_xyxy(box)
